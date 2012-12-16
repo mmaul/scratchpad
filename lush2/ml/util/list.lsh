@@ -1,0 +1,55 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; util/lisp package for LUSH Lisp Universal Shell
+;;;   Copyright (C) 2012 Mike Maul
+;;;
+;;; This program is free software; you can redistribute it and/or modify
+;;; it under the terms of the GNU Lesser General Public License as 
+;;; published by the Free Software Foundation; either version 2.1 of the
+;;; License, or (at your option) any later version.
+;;;
+;;; This program is distributed in the hope that it will be useful,
+;;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;; GNU Lesser General Public License for more details.
+;;;
+;;; You should have received a copy of the GNU Lesser General Public
+;;; License along with this program; if not, write to the Free Software
+;;; Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, 
+;;; MA 02110-1301  USA
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+#? *** List Utilities
+
+#? (zipwith <f> <x> <y>)
+; applies function <f> to each element of <x> and <y>
+; until last element of x or y is reached
+(defun zipwith (f x y &optional acc)
+  (reverse (cond
+   ((null x) acc)
+   ((null y) acc)
+   ( t (zipwith f (cdr x) (cdr y) (cons (f (car x) (car y)) acc))))))
+
+#? (zip <x> <y>)
+; creates a list of pairs of each element of  <x> and <y>
+; until last element of x or y is reached
+(defun zip (x y &optional acc)
+  (cond
+   ((null x) (reverse acc))
+   ((null y) (reverse acc))
+   ( t (zip (cdr x) (cdr y) (cons (list (car x) (car y)) acc)))))
+
+#? (fzip <f> <y>)
+; applies each function in list of functions <f> to each element of list <y>
+; until last element of f or y is reached
+(defun fzip (f y &optional acc)
+  (cond
+   ((null f) (reverse acc))
+   ((null y) (reverse acc))
+   ( t (fzip (cdr f) (cdr y) (cons ((car f) (car y)) acc)))))
+
+
+
+
+

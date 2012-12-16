@@ -1,0 +1,105 @@
+ #? *** CSV codec
+;; Library for encoding and decoding Comma Seperated Value strings
+;; This module should "mostly" support RFC 4180 
+;; It supportes quoted CR|CRLF strings as long as the line reader passes then entire
+;; string to decode
+;; {<br>}
+;; {<b> namespace csv- }
+(libload "util/list")
+(defnamespace csv- '())
+(in-namespace csv-
+;;(defconstant skip-st 1)
+(defparameter collect-st 2)
+(defparameter quote-st 3)
+(defparameter complete-st 4)
+(defparameter quote-lit (asc "\""))
+(defparameter backslash-lit (asc "\\"))
+    
+#? (get-csv-value <s> <o> &optional <osep> <trim>)
+;; Given a string <s> containing a line of CSV text and
+;; <o> a offset returns a list containing the next column of data and the 
+;; string position after the last seperator encountered.
+;; If the optional argument <seperator> is supplied the <seporator> is used 
+;; otherwise the sepororator is the tab character
+;; if <trim> is not nill leading and trailing whitespace
+;; is removed from the  coloumn
+  
+(defun get-csv-value (s o &optional osep trim)  
+  (let ((r "");  
+	(n (length s))
+	(state  collect-st)
+	(i o)
+	(lst 0)
+	(sep (asc (if osep osep ","))))
+    ;(print complete-st state i n)
+    (while (and (<> complete-st state) (< i n))
+      (let ((ch (s i))) 
+	(cond 
+	  ((= ch quote-lit) (if  (= lst quote-lit)
+				 (progn 
+				   (setq r (str-cat r (chr ch)))
+				   (setq state quote-st))
+				 (if (= state quote-st)
+				     (setq state collect-st)
+				     (setq state quote-st))
+				 ))
+	  ((= ch sep) (if (= state quote-st) 
+				(setq r (str-cat r (chr ch)))
+				(setq state complete-st)))
+	  ;;((= ch backslash-lit) (if (= state skip-st) 
+	  ;;			    (progn 
+	  ;;		              (setq r (str-cat r "\\\\"))
+	  ;;   	                      (setq state collect-st))
+  	   ;;                          (setq state skip-st)))
+	  (t (setq r (str-cat r (chr ch)))))
+	(incr i)
+	(setq lst ch)))
+    (when (= "" r) (setq r ()))
+    (list r i)))
+  
+
+#? (decode <s> &optional <seperator> <trim>)
+;; Returns a list of values given a CSV string
+;; If the optional argument <seperator> is supplied the <seporator> is used 
+;; otherwise the sepororator is the tab character
+;; if <trim> is not nill leading and trailing whitespace
+;; is removed from the  coloumn
+;; <conversion> if supplied will be a list of monodic functions
+;; which will be applied to the resultant
+(defun decode (s  &optional osep trim conversions) 
+  (let ((o 0)
+	(ret ())
+	(fin ())
+	(sep  (if osep osep ","))
+	(trim  (if trim trim ","))
+	(conv (and (listp conversions) (> (length conversions) 0)))
+	)
+    ;(print "")
+    (while (not fin)
+      (let-filter (((v p) (get-csv-value s o sep trim)))
+	(if v (setq ret (cons v ret)) (setq fin t))
+	(setq o p)))
+    (let ((resultant (reverse ret)))
+      ;(print conv conversions resultant)
+      (if conv (fzip conversions resultant) resultant))))
+
+#? (encode <csv-list> &optional <sep>)
+;; Encodes list of numeric and strings into a CSV encoded string
+;; Optional argument <sep> specifies specific field seperator default is ","  
+(defun encode (csv-list &optional sep)
+  (let ((sep (if sep sep ","))) 
+    (str-join sep (mapcar (lambda (st) (let* ((s (if (stringp st) st (str st)))
+					      (f (str-find "\"" s))
+					     (sp (if f (str-insert s f "\"") s))) (if (str-find sep sp)  (str-cat "\"" sp "\"") sp)))
+				   csv-list))))
+
+   
+;;(defun encode1 (csv-list &optional sep)
+;; (let* ((sep (if sep sep ","))
+;;	(ln (length csv-list))
+;;	(i (+ ln 1)))
+;;    (reduce< (lambda (c s) (progn (decr i) (str-cat (let* ((f (str-find "\"" s))
+;;							   (sp (if f (str-insert s f "\"") s))) (if (str-find sep sp)  (str-cat "\"" sp "\"") sp)) 
+;;						    (if (<> i ln) sep "") c))) "" csv-list))) 
+)
+

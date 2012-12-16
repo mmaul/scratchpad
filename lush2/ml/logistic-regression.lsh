@@ -1,0 +1,127 @@
+(libload "libidx/idx-double")
+(libload "optim/cg-descent")
+(libload "optim/lbfgs")
+(libload "gnuplot/plot")
+(libload "lapack/mat")
+(libload "ml-common")
+;; Parameters
+(defparameter gp (if gp gp (new Gnuplot 'interactive ())))
+(defparameter *datapath* ".")
+(defparameter *data1* "ex2data1.txt")
+(defparameter data (csv-file->double-array/1 (concat-fname *datapath* *data1*) 4))
+(defparameter data-cols (idx-shape data 1))
+(defparameter data-rows (idx-shape data 0))
+(defparameter X (idx-trim data 1 0 (- data-cols 1)))
+(defparameter X-cols (idx-shape X 1))
+(defparameter theta (array-clear (double-array X-cols) 0))
+(defparameter y (idx-trim data 1 (- data-cols 1)  1))
+
+; Since all operations here are
+; overloaded with idx variants
+; this function takes either idx values
+; or numbers. Though to convert to compiled version
+; you will need to think alittle.
+
+; f(z)=1/1+e^-z
+(defun sigmoid-nc (theta)
+  (/ 1 (+ 1 (exp (- theta))))
+)
+
+; f(z)=1/1+e^-z
+(defun sigmoid (theta)
+  (declare (-idx1- (-double-)) theta)
+  (let ((ret (double-array (length theta))))
+    (idx-d1inv (idx-addm0  (idx-exp (idx-minus theta)) (scalar 1) ) ret)
+    ret)
+)
+
+;1/m Sigma 1->m [ (-y*log(sigmoid(x*theta)) - (1 - y)*log(1-sigmoid(x*theta)) ]
+(defun cost-nc (X y theta)
+  (let* ((m (idx-shape X 0))
+	 (h (sigmoid (idx-m2dotm1 X theta))))
+    (* (/ 1 m) 
+       (- ((mat-.* (idx-reshape (idx-log h) (list 1 m)) (idx-minus y)) 0 0)
+	  ((mat-.* (idx-reshape (idx-log (- 1 h))  (list 1 m)) (- 1 y)) 0 0)))
+    )
+  )
+
+;1/m Sigma 1->m  [ (-y*log(sigmoid(x*theta)) - (1 - y)*log(1-sigmoid(x*theta)) ]  
+(defun cost (X y theta)
+   (declare (-idx2- (-double-)) X y)
+   (declare (-idx1- (-double-)) theta)
+   (let* ((m (idx-shape X 0))
+	  (acc (double-array m))
+	  (h (sigmoid (idx-m2dotm1 X theta acc)))
+	  ( _1-y (double-array m 1))
+	  (_ (idx-d2addc (idx-minus y) 1 _1-y))
+	  ( _1-h (double-array m))
+	  (_ (idx-d1addc (idx-minus h) 1 _1-h)))
+     (*  (/ 1 m)
+	 (- ((mat-.*  (idx-reshape (idx-log  h) (list 1 m))  (idx-minus  y )) 0 0)
+	    ((mat-.*  (idx-reshape (idx-log _1-h) (list 1 m))  _1-y ) 0 0)) )
+     )
+   )
+
+;1/m Sigma 1->m [ (sigmoid(x*theta) - y) * x ]
+(defun gradient-nc (X y theta)
+  (let* ((m (idx-shape X 0))
+	 (h (sigmoid (idx-m2dotm1 X theta))))
+    (idx-flatten (* (/ 1 m) (mat-.*  (- h (mat-transpose y)) X))))
+  )
+
+;1/m Sigma 1->m [ (sigmoid(x*theta) - y) * x ]
+(defun gradient (X y theta)
+  (declare (-idx2- (-double-)) X y)
+  (declare (-idx1- (-double-)) theta)
+  (let* ((m (idx-shape X 0))
+	 (acc (double-array m))
+	 (h (sigmoid (idx-m2dotm1 X theta acc))))
+    (idx-dotm0 
+     (idx-flatten 
+      (mat-.*  
+       (idx-reshape (idx-sub (idx-reshape h (list m 1)) y)
+		    (list 1 m))
+       X))
+     (scalar (/ 1 m))
+     )
+    )
+  )
+
+(dhc-make () sigmoid cost gradient)
+
+; cg-descent unfortunately is unstable.
+; it converges, fails to converge or raises runtime exception
+; *** lush runtime error: FPU exception 'overflow' at 0xb73cf1b2
+; ** in: C__cg_descent
+; given identical arguments at each run
+(defun do-cg-descent (X y theta)
+  (let ((cgp (cg-params)))
+    ;(assign (:cgp:access 'restart_fac) 5)
+    ;(assign (:cgp:access 'PrintLevel) 1)
+    (cg-descent theta (lambda (t) (cost X y t)) 
+	    (lambda (gx t) (array-copy (gradient X y t) gx)) 1e-4) 
+    )
+  )
+
+
+; lbfgs
+;  (cputime (repeat 100 (lbfgs theta (lambda (t) (cost X y t)) 
+;	    (lambda (gx t) (array-copy (gradient X y t) gx) ()) 1e-6 params) ))
+;  = 1.46
+; Compared with fminuc in octave
+; options = optimset('GradObj', 'on', 'MaxIter', 400);
+; tic();for c=1:100 fminunc(@(t)(costFunction(t, X, y)), initial_theta, options); endfor, toc()
+; Elapsed time is 5.5109 seconds.
+; with provided dataset converges to 
+; (do-lbfgs X y theta)
+; = [d -25.1614   0.2062   0.2015]
+
+(defun do-lbfgs (X y theta)
+  (let ((params (lbfgs-params)))
+    ;(params 'iprint-1 0)
+    (lbfgs theta (lambda (t) (cost X y t)) 
+	    (lambda (gx t) (array-copy (gradient X y t) gx) ()) 1e-6 params) 
+    )
+  )
+
+  

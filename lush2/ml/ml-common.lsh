@@ -1,0 +1,29 @@
+;; Utility function for ML examples
+(libload "codec/csv/csv")
+#?(csv-file->double-array <fn>)
+; Loads comman seperated file fn into a NxM+1 double array
+; where leading column of array has value of 1
+(defun csv-file->double-array (fn )
+  (let* ((data1-lst (mapcar #\(cons 1 (csv-decode $1 "," t (list str-val str-val)))
+	   (read-lines fn)))
+    (data1-len (length data1-lst)))
+  (idx-reshape (as-double-array (flatten data1-lst)) (list data1-len 3))
+  )
+)
+
+(defun csv-file->double-array/1 (fn cols)
+  (let* ((data1-lst (mapcar #\(cons 1 (csv-decode $1 "," t (list str-val str-val str-val str-val str-val)))
+	   (read-lines fn)))
+    (data1-len (length data1-lst)))
+  (idx-reshape (as-double-array (flatten data1-lst)) (list data1-len cols))
+  )
+)
+
+;; Patch for compiler bug
+ (de dhc-list-access (var-name pos)
+   (let ((spos (cond                  ; Some weird bug where
+		 ((= 0 pos) "0")      ; when pos is 0 or 1
+		 ((= 1 pos) "1")      ; concat : not a string : 98
+		 (t (str pos)))))
+     (concat "L_ACCESS(" var-name ", " spos ")") ))
+
